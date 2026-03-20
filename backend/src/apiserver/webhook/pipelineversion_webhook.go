@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/kubeflow/pipelines/backend/src/apiserver/common"
 	"github.com/kubeflow/pipelines/backend/src/apiserver/template"
@@ -106,7 +107,18 @@ func (p *PipelineVersionsWebhook) ValidateCreate(
 		return nil, newBadRequestError(err.Error())
 	}
 
-	return nil, nil
+	// PipeClear pre-flight validation
+	pipeclearResult, err := ValidatePipelineSpec(tmpl, nil) // nil = use defaults
+	if err != nil {
+		return nil, newBadRequestError(fmt.Sprintf("PipeClear validation error: %v", err))
+	}
+
+	if len(pipeclearResult.Denials) > 0 {
+		return ctrladmission.Warnings(pipeclearResult.Warnings),
+			newBadRequestError(fmt.Sprintf("PipeClear validation failed: %s", strings.Join(pipeclearResult.Denials, "; ")))
+	}
+
+	return ctrladmission.Warnings(pipeclearResult.Warnings), nil
 }
 
 func (p *PipelineVersionsWebhook) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (ctrladmission.Warnings, error) {
